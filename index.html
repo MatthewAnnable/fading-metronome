@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fading Metronome</title>
+<style>
+  :root {
+    --bg:#faf7f2; --ink:#1d1b19; --mute:#7a746b; --card:#fff; --line:#e4ddd0; --accent:#8a4b1f; --chip:#f1ebe1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#181614; --ink:#f0ebe3; --mute:#9c958a; --card:#23201d; --line:#3a352f; --accent:#e0a064; --chip:#2e2a26; }
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  .wrap { max-width:640px; margin:0 auto; padding:20px 16px 48px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--mute); margin:0 0 18px; font-size:15px; }
+  button { font:inherit; color:inherit; cursor:pointer; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin:14px 0; }
+  label.h { display:block; font-weight:700; margin-bottom:8px; }
+  .tempo { display:flex; align-items:center; gap:12px; }
+  .tempo input[type=range] { flex:1; accent-color:var(--accent); }
+  .tempo .bpm { min-width:92px; text-align:right; font-size:26px; font-weight:800; font-variant-numeric:tabular-nums; }
+  .tempo .bpm small { font-size:13px; font-weight:600; color:var(--mute); }
+  .step { border:1.5px solid var(--line); background:var(--card); border-radius:10px; width:40px; height:40px; font-size:20px; font-weight:700; }
+  .pills { display:flex; gap:8px; }
+  .pill { border:1.5px solid var(--line); background:var(--card); border-radius:22px; padding:8px 20px; font-weight:700; }
+  .pill.on { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  .opts { display:grid; gap:18px; }
+  .big { background:var(--accent); color:#fff; border:0; border-radius:12px; padding:14px 22px; font-size:18px; font-weight:700; min-width:140px; }
+  @media (prefers-color-scheme: dark) { .big { color:#181614; } }
+  .ghost { background:none; border:1.5px solid var(--line); border-radius:12px; padding:12px 16px; font-weight:600; }
+  .ghost.on { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  .ghost:disabled { opacity:.4; cursor:default; }
+  .controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .stage { font-size:18px; font-weight:700; margin:0 0 2px; }
+  .stagedesc { color:var(--mute); font-size:15px; margin:0 0 14px; min-height:22px; }
+  .bars { display:grid; gap:10px; }
+  .barrow { display:grid; grid-template-columns:52px 1fr; align-items:center; gap:8px; }
+  .barlabel { color:var(--mute); font-size:13px; font-weight:600; }
+  .beats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .beat { aspect-ratio:2.2/1; border-radius:10px; border:2px solid var(--line); display:flex; align-items:center; justify-content:center;
+          font-weight:800; font-size:18px; color:var(--mute); transition:background .06s, border-color .06s; }
+  .beat.audible { background:var(--chip); border-color:var(--ink); color:var(--ink); }
+  .beat.silent { border-style:dashed; opacity:.6; }
+  .beat.now.audible { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .beat.now.silent { border-color:var(--accent); color:var(--accent); opacity:1; }
+  @media (prefers-color-scheme: dark) { .beat.now.audible { color:#181614; } }
+  .dots { display:flex; gap:6px; margin-top:14px; align-items:center; flex-wrap:wrap; }
+  .dots i { width:26px; height:6px; border-radius:3px; background:var(--line); }
+  .dots i.done { background:var(--ink); }
+  .dots i.cur { background:var(--accent); }
+  .rep { color:var(--mute); font-size:14px; margin-left:6px; }
+  details { color:var(--mute); font-size:15px; }
+  summary { cursor:pointer; font-weight:600; color:var(--ink); }
+  details ol { padding-left:20px; margin:8px 0 0; }
+  .vol { display:flex; align-items:center; gap:10px; }
+  .vol input { flex:1; accent-color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Fading Metronome</h1>
+  <p class="sub">Play a riff you know well. The click disappears bit by bit, until you're keeping the beat on your own.</p>
+
+  <div class="card opts">
+    <div>
+      <label class="h" for="tempo">Tempo</label>
+      <div class="tempo">
+        <button class="step" id="tDown" aria-label="Slower">−</button>
+        <input type="range" id="tempo" min="40" max="200" value="80">
+        <button class="step" id="tUp" aria-label="Faster">+</button>
+        <div class="bpm"><span id="bpmVal">80</span> <small>bpm</small></div>
+      </div>
+    </div>
+    <div>
+      <label class="h">Repeats before it changes</label>
+      <div class="pills" id="repPills">
+        <button class="pill" data-n="1">1</button>
+        <button class="pill on" data-n="2">2</button>
+        <button class="pill" data-n="3">3</button>
+      </div>
+    </div>
+    <div>
+      <label class="h" for="vol">Click volume</label>
+      <div class="vol"><input type="range" id="vol" min="0" max="100" value="80"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="stage" id="stageTitle">Stage 1 of 7</p>
+    <p class="stagedesc" id="stageDesc"></p>
+    <div class="bars" id="bars"></div>
+    <div class="dots" id="dots"></div>
+  </div>
+
+  <div class="controls">
+    <button class="big" id="go">Start</button>
+    <button class="ghost" id="hold" aria-pressed="false">Hold this stage</button>
+    <button class="ghost" id="prev">← Previous stage</button>
+    <button class="ghost" id="next">Next stage →</button>
+    <button class="ghost" id="restart">Start over</button>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>How it works</summary>
+      <ol>
+        <li>Choose a riff you can play without thinking. One pass of it should fill 4 bars (16 beats).</li>
+        <li>Start the click and play the riff round and round.</li>
+        <li>First the click drops beat 4 of every bar, then beat 3, then beat 2.</li>
+        <li>Then it drops the first beat of bar 4, then bar 2, leaving beat 1 of bars 1 and 3, then bar 3.</li>
+        <li>At the end you hear only beat 1 of every 16. Are you still in time with it?</li>
+      </ol>
+      <p>Dashed boxes are beats where the click is silent. If you notice you've drifted, drop the tempo or go back a stage.</p>
+    </details>
+  </div>
+</div>
+
+<script>
+(() => {
+  const BARS = 4, BEATS = 4, TOTAL = BARS * BEATS;
+
+  // Each stage: which of the 16 beats make a click. Beat index = bar*4 + beat.
+  const all = () => Array.from({length: TOTAL}, () => true);
+  const stages = [];
+  {
+    let s = all();
+    stages.push({ audible: s.slice(), desc: 'Every beat clicks. Settle into the riff.' });
+    const drop = (arr, pred) => arr.map((v, i) => v && !pred(i));
+    s = drop(s, i => i % 4 === 3);
+    stages.push({ audible: s.slice(), desc: 'Beat 4 of every bar is silent.' });
+    s = drop(s, i => i % 4 === 2);
+    stages.push({ audible: s.slice(), desc: 'Beats 3 and 4 are silent.' });
+    s = drop(s, i => i % 4 === 1);
+    stages.push({ audible: s.slice(), desc: 'Only beat 1 of each bar clicks.' });
+    s = drop(s, i => i === 12);
+    stages.push({ audible: s.slice(), desc: 'Bar 4 has no click at all.' });
+    s = drop(s, i => i === 4);
+    stages.push({ audible: s.slice(), desc: 'Only bars 1 and 3 click, with 8 beats between.' });
+    s = drop(s, i => i === 8);
+    stages.push({ audible: s.slice(), desc: 'Only beat 1 of bar 1. You are on your own for the other 15 beats.' });
+  }
+  const LAST = stages.length - 1;
+
+  const $ = id => document.getElementById(id);
+  let tempo = 80, repeats = 2, vol = 0.8;
+  let stage = 0, rep = 0;          // rep: completed passes of the current stage
+  let playing = false, hold = false;
+
+  // ---- UI build
+  const barsEl = $('bars');
+  const beatEls = [];
+  for (let b = 0; b < BARS; b++) {
+    const row = document.createElement('div'); row.className = 'barrow';
+    row.innerHTML = `<div class="barlabel">Bar ${b + 1}</div>`;
+    const beats = document.createElement('div'); beats.className = 'beats';
+    for (let k = 0; k < BEATS; k++) {
+      const d = document.createElement('div'); d.className = 'beat'; d.textContent = k + 1;
+      beats.appendChild(d); beatEls.push(d);
+    }
+    row.appendChild(beats); barsEl.appendChild(row);
+  }
+  const dotsEl = $('dots');
+  stages.forEach(() => dotsEl.appendChild(document.createElement('i')));
+  const repLabel = document.createElement('span'); repLabel.className = 'rep'; dotsEl.appendChild(repLabel);
+
+  function render(nowIdx = -1) {
+    const st = stages[stage];
+    beatEls.forEach((el, i) => {
+      el.className = 'beat ' + (st.audible[i] ? 'audible' : 'silent') + (i === nowIdx ? ' now' : '');
+    });
+    $('stageTitle').textContent = `Stage ${stage + 1} of ${stages.length}`;
+    $('stageDesc').textContent = st.desc;
+    [...dotsEl.querySelectorAll('i')].forEach((d, i) => {
+      d.className = i < stage ? 'done' : i === stage ? 'cur' : '';
+    });
+    repLabel.textContent = hold ? 'Holding this stage' : stage === LAST
+      ? (playing ? 'Keep going until you stop' : '')
+      : (playing ? `Pass ${Math.min(rep + 1, repeats)} of ${repeats}` : `${repeats} ${repeats === 1 ? 'pass' : 'passes'} per stage`);
+    $('prev').disabled = stage === 0;
+    $('next').disabled = stage === LAST;
+    $('go').textContent = playing ? 'Stop' : 'Start';
+  }
+
+  // ---- Audio (lookahead scheduler)
+  let ctx = null, master = null;
+  let nextTime = 0, beatIdx = 0, timer = null;
+  const queue = [];  // {time, idx} for visual sync
+  let raf = null;
+
+  function click(time, accent) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.value = accent ? 1500 : 1000;
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(accent ? 1 : 0.7, time + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + 0.06);
+    o.connect(g); g.connect(master);
+    o.start(time); o.stop(time + 0.08);
+  }
+
+  function schedule() {
+    while (nextTime < ctx.currentTime + 0.2) {
+      // Beat about to be scheduled belongs to the current stage/rep
+      if (stages[stage].audible[beatIdx]) click(nextTime, beatIdx % BEATS === 0);
+      queue.push({ time: nextTime, idx: beatIdx, stage, rep });
+      nextTime += 60 / tempo;
+      beatIdx++;
+      if (beatIdx === TOTAL) {
+        beatIdx = 0;
+        rep++;
+        if (hold) rep = 0;
+        else if (stage < LAST && rep >= repeats) { stage++; rep = 0; }
+      }
+    }
+  }
+
+  let lit = -1, litUntil = 0;
+  function frame() {
+    const t = ctx.currentTime;
+    let cur = null;
+    if (lit >= 0 && t > litUntil) { beatEls[lit].classList.remove('now'); lit = -1; }
+    while (queue.length && queue[0].time <= t) cur = queue.shift();
+    if (cur) {
+      const a = stages[cur.stage].audible;
+      if (a[cur.idx]) { lit = cur.idx; litUntil = cur.time + 0.15; }
+      beatEls.forEach((el, i) => {
+        el.className = 'beat ' + (a[i] ? 'audible' : 'silent') + (i === lit ? ' now' : '');
+      });
+      $('stageTitle').textContent = `Stage ${cur.stage + 1} of ${stages.length}`;
+      $('stageDesc').textContent = stages[cur.stage].desc;
+      [...dotsEl.querySelectorAll('i')].forEach((d, i) => {
+        d.className = i < cur.stage ? 'done' : i === cur.stage ? 'cur' : '';
+      });
+      repLabel.textContent = hold ? 'Holding this stage' : cur.stage === LAST ? 'Keep going until you stop' : `Pass ${cur.rep + 1} of ${repeats}`;
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
+  function start() {
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      master = ctx.createGain(); master.connect(ctx.destination);
+    }
+    master.gain.value = vol;
+    ctx.resume();
+    playing = true;
+    beatIdx = 0; rep = 0; lit = -1;
+    queue.length = 0;
+    nextTime = ctx.currentTime + 0.15;
+    schedule();
+    timer = setInterval(schedule, 25);
+    raf = requestAnimationFrame(frame);
+    render();
+  }
+
+  function stop() {
+    playing = false;
+    clearInterval(timer); timer = null;
+    cancelAnimationFrame(raf);
+    queue.length = 0;
+    rep = 0;
+    render();
+  }
+
+  // ---- Controls
+  function setTempo(v) {
+    tempo = Math.max(40, Math.min(200, v));
+    $('tempo').value = tempo; $('bpmVal').textContent = tempo;
+  }
+  $('tempo').addEventListener('input', e => setTempo(+e.target.value));
+  $('tDown').addEventListener('click', () => setTempo(tempo - 1));
+  $('tUp').addEventListener('click', () => setTempo(tempo + 1));
+  $('vol').addEventListener('input', e => { vol = e.target.value / 100; if (master) master.gain.value = vol; });
+
+  $('repPills').addEventListener('click', e => {
+    const b = e.target.closest('.pill'); if (!b) return;
+    repeats = +b.dataset.n;
+    document.querySelectorAll('#repPills .pill').forEach(p => p.classList.toggle('on', p === b));
+    render();
+  });
+
+  $('hold').addEventListener('click', () => {
+    hold = !hold;
+    $('hold').classList.toggle('on', hold);
+    $('hold').setAttribute('aria-pressed', hold);
+    $('hold').textContent = hold ? 'Holding — tap to release' : 'Hold this stage';
+    render();
+  });
+
+  $('go').addEventListener('click', () => playing ? stop() : start());
+
+  function goStage(n) {
+    stage = Math.max(0, Math.min(LAST, n));
+    rep = 0;
+    if (playing) { // restart the 16-beat cycle on the new stage
+      queue.length = 0; beatIdx = 0; nextTime = ctx.currentTime + 0.15;
+    }
+    render();
+  }
+  $('prev').addEventListener('click', () => goStage(stage - 1));
+  $('next').addEventListener('click', () => goStage(stage + 1));
+  $('restart').addEventListener('click', () => goStage(0));
+
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && !/INPUT|BUTTON/.test(document.activeElement.tagName)) {
+      e.preventDefault(); $('go').click();
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
