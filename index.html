@@ -273,6 +273,11 @@
   $('tempo').addEventListener('input', e => setTempo(+e.target.value));
   $('tDown').addEventListener('click', () => setTempo(tempo - 1));
   $('tUp').addEventListener('click', () => setTempo(tempo + 1));
+  // A link from a lesson summary can set the speed, e.g. ?v=1&bpm=72
+  try {
+    const b = new URLSearchParams(location.search).get('bpm');
+    if (/^\d{2,3}$/.test(b || '') && +b >= 40 && +b <= 200) setTempo(+b);
+  } catch (e) {}
   $('vol').addEventListener('input', e => { vol = e.target.value / 100; if (master) master.gain.value = vol; });
 
   $('repPills').addEventListener('click', e => {
